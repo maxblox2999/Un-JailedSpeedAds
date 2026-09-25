@@ -51,7 +51,6 @@ jobs:
           fi
           echo "THEOS=$THEOS" >> "$GITHUB_ENV"
 
-      # Each variant is a separate stage; outputs collect into dist/ and ship as one artifact.
       # Pin the SDK to the patched 16.5 from $THEOS/sdks. Without this, TARGET "latest"
       # resolves to Xcode's iOS 18 SDK (higher version), which has no Preferences link stub.
       # TARGET on the command line overrides both Makefiles, incl. the subproject.
@@ -60,24 +59,19 @@ jobs:
           rm -rf packages
           make clean || true
           make package FINALPACKAGE=1 ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:15.0"
+          package=$(find packages -name '*iphoneos-arm64.deb' -print -quit)
+          test -n "$package"
+          mkdir -p verify
+          dpkg-deb -x "$package" verify
+          for binary in \
+            verify/var/jb/Library/MobileSubstrate/DynamicLibraries/adspeed.dylib \
+            verify/var/jb/Library/PreferenceBundles/adspeedprefs.bundle/adspeedprefs; do
+            xcrun lipo -archs "$binary" | grep -q 'arm64e'
+            xcrun otool -hv -arch arm64e "$binary" | awk '/MH_MAGIC_64/ { if ($4 != "0x80") exit 1; seen=1 } END { if (!seen) exit 1 }'
+          done
           mkdir -p dist && cp packages/*.deb dist/
 
-      - name: Build rootful .deb (arm64 + arm64e)
-        run: |
-          rm -rf packages
-          make clean || true
-          make package FINALPACKAGE=1 THEOS_PACKAGE_SCHEME= ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:15.0"
-          cp packages/*.deb dist/
-
-      # Jailed injection targets sideloaded App Store apps, which run as arm64 — keep this
-      # slice arm64-only (no Preferences here, so no patched SDK needed, but pin anyway).
-      - name: Build jailed dylib (TrollFools / Sideloadly)
-        run: |
-          make clean || true
-          make jailed FINALPACKAGE=1 ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:15.0"
-          cp packages/adspeed-jailed.dylib dist/
-
-      - name: Upload combined archive
+      - name: Upload rootless package
         uses: actions/upload-artifact@v4
         with:
           name: adspeed-builds-${{ steps.ver.outputs.version }}
@@ -101,5 +95,4 @@ jobs:
         with:
           files: |
             dist/**/*.deb
-            dist/**/*.dylib
           fail_on_unmatched_files: true
