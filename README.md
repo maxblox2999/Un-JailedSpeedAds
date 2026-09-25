@@ -11,28 +11,34 @@ There is no content analysis. The tweak neutralises ads by name:
 - **Display ads** (banner / interstitial / native / app-open) from known SDKs
   (Google AdMob `GAD*`, AppLovin `AL*`/`MA*`, ironSource `IS*`, Meta `FBAd*`,
   Google IMA `IMAAd`, Vungle, Snap `SCSnapAds*`, React-Native Google Mobile Ads…)
-  have their `load` / `render` / `isReady` methods stubbed, so the host app believes
-  no ad is available.
-- **Reward / video ads** are *sped up* (not blocked) so you still get the reward,
-  but only while a known ad view-controller is on screen — your normal app video is
-  left untouched.
+  have selected `load` / `render` / `isReady` methods stubbed, so the host app believes
+  no ad is available. The display-only option uses a smaller list of format-specific hooks.
+- **Reward / video ads** can play faster through web video and detected native ad
+  players. Credit depends on the host app and ad provider, so it is not guaranteed.
 - An optional, separate toggle bypasses common jailbreak-detection checks.
 
 ## Settings (deb)
 
 After installing the `.deb`, open **Settings → Ads Speed**:
 
-- Master on/off, "Block display ads", "Speed up reward-ad video",
+- Master on/off, "Block display ads" (on by default for enabled apps),
+  "Block all ads (includes rewards)" (off by default), "Fast-forward ads",
   "Bypass ads jailbreak detection".
 - "Video speed → Multiplier" (default 8).
 - **Apps**: a list of every installed app. The tweak only runs in apps you enable
   here. Changes apply the next time the app is launched.
 
 By default nothing happens until you enable an app in the list.
+Full blocking also prevents rewarded ads from playing. Leave it off to combine
+display blocking with reward video speed-up. A compatible rootless jailbreak and
+working tweak injection are required on each iOS version; building the package
+alone does not add jailbreak support.
 
 ## Building
 
-Requires [Theos](https://theos.dev) (macOS, or Linux/WSL — see [BUILD.md](BUILD.md)).
+The arm64e Settings bundle needs Xcode and Theos on macOS. The included GitHub
+Actions workflow builds and checks the rootless package. Linux/WSL can build an
+arm64-only variant that does not load Settings on arm64e devices; see [BUILD.md](BUILD.md).
 
 ```sh
 # rootless .deb (Dopamine, palera1n rootless …), iOS 15.0+
@@ -75,6 +81,10 @@ they won't load.
 - `adspeed.plist` — injection filter (all UIKit apps; the runtime gate decides).
 - `layout/` — PreferenceLoader entry.
 
+
+## Credits
+
+34306, SoulRune, maxblox2999.
 
 ## License
 

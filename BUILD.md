@@ -1,7 +1,21 @@
-# Building on Debian / WSL Debian
+# Building
 
-These steps build the `.deb` on a plain Debian system, including **WSL Debian** on
-Windows. macOS is not required — Theos runs fine on Linux.
+## Rootless package for arm64e devices
+
+Build on macOS with Xcode and Theos, or run the included GitHub Actions workflow.
+The package must contain arm64 and arm64e slices in both the tweak and the Settings
+bundle. The arm64e Mach-O header must report ABI marker `0x80`. The workflow checks
+both binaries before uploading the rootless package.
+
+```sh
+make package ARCHS="arm64 arm64e" TARGET="iphone:clang:16.5:15.0"
+```
+
+## Building on Debian / WSL Debian
+
+These steps can build an arm64-only package on Debian, including WSL Debian.
+That package cannot load its Settings bundle in an arm64e Settings process on
+recent A12+ devices. Use the macOS build above for those devices.
 
 ## 0. (Windows only) Install WSL Debian
 
@@ -121,13 +135,13 @@ cd Un-JailedSpeedAds
 
 ```bash
 # rootless .deb (Dopamine, palera1n rootless, etc.) — iOS 15.0+
-make package
+make package ARCHS=arm64
 
 # rootful .deb (palera1n rootful, XinaA15, etc.) — same iOS versions
-make package THEOS_PACKAGE_SCHEME=
+make package THEOS_PACKAGE_SCHEME= ARCHS=arm64
 
 # jailed build: web video speed-up only, for injecting into an .ipa (TrollFools).
-make jailed     # outputs packages/adspeed-jailed.dylib
+make jailed ARCHS=arm64    # outputs packages/adspeed-jailed.dylib
 ```
 
 The jailed dylib needs a substrate provider bundled into the app at inject time:
@@ -149,8 +163,9 @@ Then open **Settings → Ads Speed** and enable the apps you want.
 
 ## Troubleshooting
 
-- **`arm64e` build error** — some Linux toolchains don't emit `arm64e`. Drop it:
-  `make package ARCHS=arm64`. App Store apps load the `arm64` slice anyway.
+- **`arm64e` build error** — build on macOS with Xcode and Theos or use the
+  GitHub Actions workflow. An arm64-only Linux package cannot load the Settings
+  bundle in an arm64e Settings process.
 - **`make: *** No rule to make target` / weird syntax errors** — almost always CRLF
   line endings; see the `sed` note in step 3.
 - **`The futureproof rootless prefix...` / wrong install path** — make sure

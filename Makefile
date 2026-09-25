@@ -1,13 +1,8 @@
 export THEOS_PACKAGE_SCHEME = rootless   # default; for a rootful .deb: make package THEOS_PACKAGE_SCHEME=
 
-# arm64 only by default: the Linux Swift toolchain's clang doesn't tag arm64e with a
-# distinct CPU subtype, so lipo can't merge the two slices.
-#
-# arm64 already covers App Store / user apps (which run as arm64) — the main target for
-# ad blocking/speed-up. On A12+ devices the system processes run as arm64e, so add an
-# arm64e slice to also hook those, which needs a macOS toolchain. The GitHub Actions
-# build (macOS) does exactly that:  make package ARCHS="arm64 arm64e"
-ARCHS = arm64
+# Settings runs as arm64e on A12+ devices. Use the macOS Apple toolchain so the
+# arm64e slice has the pointer-authentication ABI required by recent iOS versions.
+ARCHS = arm64 arm64e
 # platform:compiler:sdk:deployment. iOS 15.0 minimum (rootless-only tweak).
 # A modern minimum also makes clang emit the new -platform_version flag that
 # ld64.lld requires. "latest" picks the newest installed SDK.

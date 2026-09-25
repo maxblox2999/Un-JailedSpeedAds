@@ -19,11 +19,13 @@
 #import <substrate.h>
 #import <mach-o/dyld.h>
 #import <WebKit/WebKit.h>
+#import <AVFoundation/AVFoundation.h>
 
 #pragma mark - Preferences
 
 static NSString *const kKeyMaster     = @"Enabled";        // master on/off, default YES
 static NSString *const kKeyBlockAds   = @"BlockAds";       // SDK ad blocking, default YES
+static NSString *const kKeyBlockDisplay = @"BlockDisplayAds";
 static NSString *const kKeySpeedVideo = @"SpeedUpVideo";   // speed up ad video, default YES
 static NSString *const kKeyVideoRate  = @"VideoRate";      // playback multiplier, default 8.0
 static NSString *const kKeyWebTimers  = @"CompressTimers"; // compress JS setTimeout/setInterval, default NO
@@ -137,13 +139,25 @@ static IMP stubFor(StubType t) {
                            : (IMP)returnFalse;
 }
 
+static BOOL markHookInstalled(Class cls, SEL selector) {
+    static NSMutableSet<NSString *> *installed;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{ installed = [NSMutableSet new]; });
+    NSString *key = [NSString stringWithFormat:@"%p:%s", cls, sel_getName(selector)];
+    @synchronized (installed) {
+        if ([installed containsObject:key]) return NO;
+        [installed addObject:key];
+    }
+    return YES;
+}
+
 static void installHook(const AdHook *h) {
     Class c = objc_getClass(h->cls);
     if (!c) return;
     SEL s = sel_registerName(h->sel);
     // Only retarget a method the class actually implements - never add new methods,
     // which would alter -respondsToSelector: behaviour.
-    if (!class_getInstanceMethod(c, s)) return;
+    if (!class_getInstanceMethod(c, s) || !markHookInstalled(c, s)) return;
     MSHookMessageEx(c, s, stubFor(h->type), NULL);
 }
 
@@ -152,8 +166,9 @@ static void installClassHook(const AdHook *h) {
     Class c = objc_getClass(h->cls);
     if (!c) return;
     SEL s = sel_registerName(h->sel);
-    if (!class_getClassMethod(c, s)) return;
-    MSHookMessageEx(object_getClass(c), s, stubFor(h->type), NULL);
+    Class meta = object_getClass(c);
+    if (!class_getClassMethod(c, s) || !markHookInstalled(meta, s)) return;
+    MSHookMessageEx(meta, s, stubFor(h->type), NULL);
 }
 
 static void installAll(const AdHook *table, size_t n) {
@@ -397,6 +412,32 @@ static const AdHook kAdHooks[] = {
     {"BigoRewardVideoAd", "isExpired", StubBOOL},
 };
 
+// Keep rewarded SDK objects available when the user also wants reward speed-up.
+// These checks target display formats with distinct classes or selectors.
+static const AdHook kDisplayHooks[] = {
+    {"GADBannerView", "loadRequest:", StubVoid},
+    {"GADInterstitialAd", "canPresentFromRootViewController:error:", StubBOOL},
+    {"GADAppOpenAd", "canPresentFromRootViewController:error:", StubBOOL},
+    {"MAInterstitialAd", "isReady", StubBOOL},
+    {"MAAppOpenAd", "isReady", StubBOOL},
+    {"FBInterstitialAd", "isAdValid", StubBOOL},
+    {"FBNativeAd", "isAdValid", StubBOOL},
+    {"LPMInterstitialAd", "isAdReady", StubBOOL},
+    {"CHBInterstitial", "isCached", StubBOOL},
+    {"CHBBanner", "isCached", StubBOOL},
+    {"PAGLInterstitialAd", "presentFromRootViewController:", StubVoid},
+    {"PAGAppOpenAd", "presentFromRootViewController:", StubVoid},
+    {"BUFullscreenVideoAd", "isAdValid", StubBOOL},
+    {"IMInterstitial", "isReady", StubBOOL},
+    {"SMAInterstitial", "isAvailableForPresentation", StubBOOL},
+    {"YMAInterstitialAd", "isLoaded", StubBOOL},
+};
+
+static const AdHook kDisplayClassHooks[] = {
+    {"IronSource", "hasInterstitial", StubBOOL},
+    {"FYBInterstitial", "isAvailable:", StubBOOL},
+};
+
 // Class-method "is ready" checks (hook the metaclass).
 static const AdHook kAdClassHooks[] = {
     // ironSource classic (mediation + DemandOnly) — all class methods returning BOOL
@@ -425,29 +466,61 @@ static const AdHook kJailbreakHooks[] = {
 
 #pragma mark - Video ad context + speed-up
 
-// Mark "we are inside an ad" by counting visible ad view-controllers. Uses
-// viewDidAppear:/viewDidDisappear: (distinct from the *blocking* hooks above, which
-// use viewWillAppear:) so the two never collide on the same selector.
-%group AdContext
+// Ad SDK frameworks may load after startup. Install these alongside the table hooks
+// whenever dyld loads another image, while keeping the original IMP for each class.
+static void (*gGadAppeared)(id, SEL, BOOL);
+static void (*gGadDisappeared)(id, SEL, BOOL);
+static void (*gMaxAppeared)(id, SEL, BOOL);
+static void (*gMaxDisappeared)(id, SEL, BOOL);
 
-%hook GADFullScreenAdViewController
-- (void)viewDidAppear:(BOOL)animated    { gAdDepth++;
-#ifdef ADSPEED_DEBUG
-    aspLog(@"ad VC appeared: GADFullScreenAdViewController depth=%d", gAdDepth);
-#endif
-    %orig; }
-- (void)viewDidDisappear:(BOOL)animated { %orig; if (gAdDepth > 0) gAdDepth--; }
-%end
+static void gadAppeared(id self, SEL selector, BOOL animated) {
+    gAdDepth++;
+    if (gGadAppeared) gGadAppeared(self, selector, animated);
+}
 
-%hook MAFullscreenAdViewController
-- (void)viewDidAppear:(BOOL)animated    { gAdDepth++; %orig; }
-- (void)viewDidDisappear:(BOOL)animated { %orig; if (gAdDepth > 0) gAdDepth--; }
-%end
+static void gadDisappeared(id self, SEL selector, BOOL animated) {
+    if (gGadDisappeared) gGadDisappeared(self, selector, animated);
+    if (gAdDepth > 0) gAdDepth--;
+}
 
-%end // group AdContext
+static void maxAppeared(id self, SEL selector, BOOL animated) {
+    gAdDepth++;
+    if (gMaxAppeared) gMaxAppeared(self, selector, animated);
+}
+
+static void maxDisappeared(id self, SEL selector, BOOL animated) {
+    if (gMaxDisappeared) gMaxDisappeared(self, selector, animated);
+    if (gAdDepth > 0) gAdDepth--;
+}
+
+static void installContextMethod(Class cls, const char *name, IMP replacement, IMP *original) {
+    SEL selector = sel_registerName(name);
+    if (class_getInstanceMethod(cls, selector) && markHookInstalled(cls, selector)) {
+        MSHookMessageEx(cls, selector, replacement, original);
+    }
+}
+
+static void installAdContext(void) {
+    Class gad = objc_getClass("GADFullScreenAdViewController");
+    if (gad) {
+        installContextMethod(gad, "viewDidAppear:", (IMP)gadAppeared, (IMP *)&gGadAppeared);
+        installContextMethod(gad, "viewDidDisappear:", (IMP)gadDisappeared, (IMP *)&gGadDisappeared);
+    }
+    Class max = objc_getClass("MAFullscreenAdViewController");
+    if (max) {
+        installContextMethod(max, "viewDidAppear:", (IMP)maxAppeared, (IMP *)&gMaxAppeared);
+        installContextMethod(max, "viewDidDisappear:", (IMP)maxDisappeared, (IMP *)&gMaxDisappeared);
+    }
+}
 
 // Only touch playback rate while an ad is on screen; leave the app's own video alone.
 %hook AVPlayer
+- (void)play {
+    %orig;
+    if (gActive && gSpeedVideo && (gSpeedNative || gAdDepth > 0) && self.rate > 0.0f) {
+        self.rate = 1.0f;
+    }
+}
 - (void)setRate:(float)rate {
 #ifdef ADSPEED_DEBUG
     if (gActive && rate > 0.0f) aspLog(@"AVPlayer setRate %.2f adDepth=%d", rate, gAdDepth);
@@ -564,9 +637,15 @@ static BOOL resolveActive(NSDictionary *prefs) {
 // launch, so hooking only once at %ctor misses them — we re-install whenever a new
 // image is loaded.
 static BOOL gInstallAds = NO;
+static BOOL gInstallDisplay = NO;
 static BOOL gInstallJB  = NO;
 
 static void installEnabled(void) {
+    if (gSpeedVideo) installAdContext();
+    if (gInstallDisplay) {
+        installAll(kDisplayHooks, sizeof(kDisplayHooks) / sizeof(kDisplayHooks[0]));
+        installAllClass(kDisplayClassHooks, sizeof(kDisplayClassHooks) / sizeof(kDisplayClassHooks[0]));
+    }
     if (gInstallAds) {
         installAll(kAdHooks, sizeof(kAdHooks) / sizeof(kAdHooks[0]));
         installAllClass(kAdClassHooks, sizeof(kAdClassHooks) / sizeof(kAdClassHooks[0]));
@@ -641,14 +720,12 @@ static void imageAdded(const struct mach_header *mh, intptr_t slide) {
         if (gVideoRate < 1.0f) gVideoRate = 1.0f;
 
         gInstallAds = prefBool(prefs, appKey(bid, kKeyBlockAds), NO);
+        gInstallDisplay = prefBool(prefs, appKey(bid, kKeyBlockDisplay), YES);
         gInstallJB  = prefBool(prefs, appKey(bid, kKeyBypassJB), YES);
 
         installEnabled();                              // classes already loaded
         _dyld_register_func_for_add_image(&imageAdded); // + lazily-loaded ad SDKs
 
-        if (gSpeedVideo) {
-            %init(AdContext);
-        }
 #endif
         // Single ungrouped %init reached by both builds — installs the AVPlayer + WKWebView
         // hooks, which self-gate on the flags above.
