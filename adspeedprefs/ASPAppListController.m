@@ -33,13 +33,14 @@
         [specs addObject:[self groupNamed:nil
                                    footer:@"Settings for this app only. They apply next time the app is launched."]];
         [specs addObject:[self switchSpecifierNamed:@"Enabled" key:enableKey default:NO]];
-        [specs addObject:[self disable:[self switchSpecifierNamed:@"Block ads" key:[self k:@"BlockAds"] default:NO] when:!enabled]];
+        [specs addObject:[self disable:[self switchSpecifierNamed:@"Block display ads" key:[self k:@"BlockDisplayAds"] default:YES] when:!enabled]];
+        [specs addObject:[self disable:[self switchSpecifierNamed:@"Block all ads (includes rewards)" key:[self k:@"BlockAds"] default:NO] when:!enabled]];
         [specs addObject:[self disable:[self switchSpecifierNamed:@"Bypass ads jailbreak detection" key:[self k:@"BypassJailbreak"] default:YES] when:!enabled]];
 
         [specs addObject:[self groupNamed:@"Fast-forward ads"
                                    footer:!enabled ? @"Enable this app first."
-                                   : blocked ? @"Disabled while Block ads is on — there's no ad to speed up."
-                                   : @"Plays reward-ad video faster, keeping the reward. “Force inline video” helps "
+                                   : blocked ? @"Disabled while full ad blocking is on; reward ads cannot play."
+                                   : @"Plays reward-ad video faster. Reward credit depends on the app and ad provider. “Force inline video” helps "
                                      @"stuck fullscreen video but can break some ads (e.g. AppLovin) — leave it off "
                                      @"unless a video won't speed up. “Include native video” also speeds in-game cutscenes."]];
         [specs addObject:[self disable:[self switchSpecifierNamed:@"Fast-forward ads" key:[self k:@"SpeedUpVideo"] default:YES] when:speedOff]];

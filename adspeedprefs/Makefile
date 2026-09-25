@@ -1,6 +1,6 @@
 # Subprojects are built by their own make pass and don't inherit the top Makefile,
 # so repeat the arch/target/linker settings here (see ../Makefile for the why).
-ARCHS = arm64
+ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:15.0
 
 include $(THEOS)/makefiles/common.mk
