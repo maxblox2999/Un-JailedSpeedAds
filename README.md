@@ -14,9 +14,9 @@ The jailed build does not include native AVPlayer acceleration, timer changes, a
 
 ## Behavior
 
-- Display ads from recognized SDK classes have their load and readiness methods replaced.
-- Reward and video ads run faster while a recognized advertising controller is visible.
-- Normal app video is left at its original speed unless the native video option is explicitly enabled.
+- The tweak hooks selected methods in known ad SDK classes to suppress display ads.
+- `AVPlayer` videos speed up inside recognized Google and AppLovin ad controllers. Enable **Include native video** to speed up other `AVPlayer` videos too.
+- HTML video in `WKWebView` speeds up in enabled apps when **Speed up video** is on, including non-ad web video.
 - Jailbreak detection bypasses are controlled by a separate option.
 - The tweak runs only in apps enabled from its Settings list.
 
