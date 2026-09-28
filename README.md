@@ -41,7 +41,7 @@ See [BUILD.md](BUILD.md) for the Debian and WSL setup.
 
 ## Install
 
-The package adds **Ads Speed** to the iOS Settings app. Enable the target apps there, then reopen them. Nothing is enabled by default.
+For the jailbreak package, enable target apps in **Settings > Ads Speed**, then reopen them. Apps start disabled. The jailed dylib is always active when injected.
 
 For a jailed build, inject `packages/adspeed-jailed.dylib` with TrollFools or with Sideloadly's Cydia Substrate option.
 
