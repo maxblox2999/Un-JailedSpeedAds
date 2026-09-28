@@ -56,4 +56,4 @@ For a jailed build, inject `packages/adspeed-jailed.dylib` with TrollFools or wi
 
 ## License
 
-Changes from commit [`2085624`](https://github.com/SoulRune/Un-JailedSpeedAds/commit/2085624ea5551efc95e7775394e3e24b1893efbb) onward are licensed under GPLv3. The project began from [34306/JailedSpeedAds](https://github.com/34306/JailedSpeedAds), which does not include an explicit license. See [LICENSE](LICENSE) for the GPLv3 text.
+See [LICENSE](LICENSE) for the license text.
