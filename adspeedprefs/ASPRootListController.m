@@ -83,6 +83,9 @@
         [reset setProperty:@YES forKey:@"enabled"];
         [specs addObject:reset];
 
+        [specs addObject:[self groupNamed:@"Credits"
+                                   footer:@"Original authors: 34306 and SoulRune. Fork contributions: maxblox2999."]];
+
         _specifiers = [specs copy];
     }
     return _specifiers;
